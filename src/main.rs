@@ -7,7 +7,8 @@
     unreachable_patterns,
     unused_imports
 )]
-use std::{arch::global_asm, char, collections::HashMap, fs, thread::current, usize};
+
+use std::{collections::HashMap, fs, process::id};
 
 #[derive(Debug, Clone, Copy)]
 struct Pos2 {
@@ -29,237 +30,41 @@ impl Pos2 {
     }
 }
 
+type Observation = Vec<Vec<char>>;
+type GalaxyMap = Vec<Pos2>;
 fn main() {
-    println!("Hello, world!");
-    let contents = fs::read_to_string("./src/inputs/day10.txt").unwrap();
-    let vec = parseStrAsVec2D(&contents);
-    let pipeMap = findLoop(&vec);
-    let ghostRows: Vec<i32> = vec![];
-    //  println!("{:?}", pipeMap);
-    println!("{}", solvePart2(&vec, &pipeMap));
+    let contents = fs::read_to_string("./src/inputs/day11.txt").unwrap();
+    let observation = parseStrAsVec2D(&contents);
+    let expanded = expandUniverse(&observation);
+    //let map = parseMapToString(&expanded)
+    let map = cratePosMap(&expanded);
+
+    println!("map{:?}", galaxyDist(&map) / 2);
+    //printStr(&map);
 }
 
-#[derive(Debug)]
-
-enum Direction {
-    South,
-    East,
-    North,
-    West,
+fn distanceBetweenPoints(p1: &Pos2, p2: &Pos2) -> i32 {
+    return (p1.x - p2.x).abs() + (p1.y - p2.y).abs();
 }
 
-fn solvePart2(vec: &Vec<Vec<char>>, map: &HashMap<String, bool>) -> i32 {
-    let mut amount = 0;
-    let mut insideAmount = -1;
-    let mut retS = "".to_owned();
-    for y in 0..vec.len() {
-        let mut inside = false;
-        for x in 0..vec[y].len() {
-            let t = vec[y as usize][x as usize];
-            let pos = Pos2::new(x as i32, y as i32);
-            match map.get(&pos.toString()) {
-                None => {
-                    if (inside) {
-                        retS.push(t);
-                        amount += 1;
-                    } else {
-                        retS.push('o');
-                    }
-                }
-                Some(_) => {
-                    if (t == '|' || t == 'F' || t == '7' || t == 'S') {
-                        retS.push('o');
-                        inside = !inside;
-                    } else {
-                        retS.push('o');
-                    }
-                }
-            }
-            // nicht: '-','J','L',
-            // schon: 'F','7','|','S'
+fn galaxyDist(map: &GalaxyMap) -> i32 {
+    let mut sum = 0;
+    for x in map {
+        for y in map {
+            sum += distanceBetweenPoints(&x, &y);
         }
-        retS.push_str("\n");
     }
-    fs::write("sol", retS);
-    return amount;
+    return sum;
 }
 
-fn pipeMapToString(vec: &Vec<Vec<char>>, map: &HashMap<String, bool>) -> String {
-    let mut retString = "".to_owned();
-    for y in 0..vec.len() {
-        for x in 0..vec[y].len() {
-            let p = Pos2::new(x as i32, y as i32);
-            match map.get(&p.toString()) {
-                Some(_) => {
-                    let tile = vec[y][x];
-                    retString.push(tile)
-                }
-                None => {
-                    if (isTileOutsideLoop(vec, map, p)) {
-                        retString.push('o');
-                    } else {
-                        retString.push('.');
-                    }
-                }
-            }
-        }
-        retString.push_str("\n");
-    }
-    return retString;
-}
-
-fn isTileOutsideLoop(vec: &Vec<Vec<char>>, map: &HashMap<String, bool>, pos: Pos2) -> bool {
-    let isOutside = false;
-    let width = vec[0].len() as i32;
-    let height = vec.len() as i32;
-    let mut amountWalls = 0;
-    for x in pos.x + 1..width {
-        let newPos = Pos2::new(x, pos.y);
-        match map.get(&newPos.toString()) {
-            None => {}
-            Some(_) => {
-                amountWalls += 1;
-                break;
-            }
+fn printStr(str: &str) {
+    for x in str.chars() {
+        if x == '\n' {
+            println!()
+        } else {
+            print!("{}", x);
         }
     }
-    for x in 0..pos.x {
-        let newPos = Pos2::new(x, pos.y);
-        match map.get(&newPos.toString()) {
-            None => {}
-            Some(_) => {
-                amountWalls += 1;
-                break;
-            }
-        }
-    }
-    for y in 0..pos.y {
-        let newPos = Pos2::new(pos.x, y);
-        match map.get(&newPos.toString()) {
-            None => {}
-            Some(_) => {
-                amountWalls += 1;
-                break;
-            }
-        }
-    }
-    for y in pos.y + 1..height {
-        let newPos = Pos2::new(pos.x, y);
-        match map.get(&newPos.toString()) {
-            None => {}
-            Some(_) => {
-                amountWalls += 1;
-                break;
-            }
-        }
-    }
-    return amountWalls < 4;
-}
-/*
-fn isEnclosedByPipes(pos: Pos2, pipeMap: &HashMap<String, bool>, vec: &Vec<Vec<char>>) -> bool {
-    let retVal = false;
-    let width = vec[0].len() as i32;
-    let height = vec.len() as i32;
-    for x in pos.x + 1..width {
-        let newPos = Pos2::new(x, pos.y);
-        let tile = vec[pos.y as usize][x as usize];
-        match pipeMap.get(&newPos.toString()){
-            None => {}
-            Some(val) => {
-                if(tile == 'J' || tile == 'F' || tile == 'L' || tile == 'T' || tile == '7'){}
-            }
-        }
-        if()
-    }
-    return retVal;
-} */
-fn findLoop(vec: &Vec<Vec<char>>) -> HashMap<String, bool> {
-    let mut retMap: HashMap<String, bool> = HashMap::new();
-    let startIndex = getIndexOfFirst('S', vec);
-    let mut first = nextFromStart(startIndex, vec);
-    let mut currentIndex = getCorrectIndex(startIndex, first, vec);
-    let oldCurrent = currentIndex;
-
-    retMap.insert(startIndex.toString(), true);
-    retMap.insert(first.toString(), true);
-
-    let mut steps = 1;
-    while !startIndex.isEqual(currentIndex) {
-        steps += 1;
-        retMap.insert(currentIndex.toString(), true);
-        let oldCurrent = currentIndex;
-        currentIndex = getCorrectIndex(first, currentIndex, vec);
-        first = oldCurrent;
-    }
-    println!("{}", (steps + 1) / 2);
-    return retMap;
-}
-
-fn nextFromStart(startPos: Pos2, vec: &Vec<Vec<char>>) -> Pos2 {
-    let curr = startPos;
-    let newEast = Pos2::new(curr.x + 1, curr.y);
-    let newWest = Pos2::new(curr.x - 1, curr.y);
-    let newSouth = Pos2::new(curr.x + 0, curr.y + 1);
-    let newNorth = Pos2::new(curr.x + 0, curr.y - 1);
-    let eastChar = vec[newEast.y as usize][newEast.x as usize];
-    let northChar = vec[newNorth.y as usize][newNorth.x as usize];
-    let westChar = vec[newWest.y as usize][newWest.x as usize];
-    let southChar = vec[newSouth.y as usize][newSouth.x as usize];
-
-    if (northChar == '|' || northChar == '7' || northChar == 'F') {
-        return newNorth;
-    } else if (eastChar == '-' || eastChar == 'J' || eastChar == '7') {
-        return newEast;
-    } else if (westChar == 'L' || westChar == '-' || westChar == 'F') {
-        return newWest;
-    } else {
-        return newSouth;
-    }
-}
-
-fn getCorrectIndex(from: Pos2, curr: Pos2, vec: &Vec<Vec<char>>) -> Pos2 {
-    let difference = Pos2::new(from.x - curr.x, from.y - curr.y);
-    let lastDirection = if (difference.x == -1 && difference.y == 0) {
-        Direction::West
-    } else if (difference.x == 1 && difference.y == 0) {
-        Direction::East
-    } else if (difference.x == 0 && difference.y == -1) {
-        Direction::North
-    } else {
-        Direction::South
-    };
-    let newEast = Pos2::new(curr.x + 1, curr.y);
-    let newWest = Pos2::new(curr.x - 1, curr.y);
-    let newSouth = Pos2::new(curr.x + 0, curr.y + 1);
-    let newNorth = Pos2::new(curr.x + 0, curr.y - 1);
-    let tile = vec[curr.y as usize][curr.x as usize];
-    return match tile {
-        '|' => match lastDirection {
-            Direction::North => newSouth,
-            _ => newNorth,
-        },
-        '-' => match lastDirection {
-            Direction::East => newWest,
-            _ => newEast,
-        },
-        'L' => match lastDirection {
-            Direction::East => newNorth,
-            _ => newEast,
-        },
-        'J' => match lastDirection {
-            Direction::North => newWest,
-            _ => newNorth,
-        },
-        '7' => match lastDirection {
-            Direction::South => newWest,
-            _ => newSouth,
-        },
-        'F' => match lastDirection {
-            Direction::South => newEast,
-            _ => newSouth,
-        },
-        _ => todo!(),
-    };
 }
 
 fn parseStrAsVec2D(str: &str) -> Vec<Vec<char>> {
@@ -274,38 +79,59 @@ fn parseStrAsVec2D(str: &str) -> Vec<Vec<char>> {
     return outerVec;
 }
 
-fn getIndexOfFirst(needle: char, haystack: &Vec<Vec<char>>) -> Pos2 {
-    let mut retVal = Pos2::new(0, 0);
-    for y in 0..haystack.len() {
-        for x in 0..haystack[y].len() {
-            if (haystack[y][x] == needle) {
-                retVal = Pos2::new(x as i32, y as i32);
+fn parseMapToString(vec: &Vec<Vec<char>>) -> String {
+    let mut retString = "".to_owned();
+    for y in 0..vec.len() {
+        for x in 0..vec[y].len() {
+            let tile = vec[y][x];
+            retString.push(tile);
+        }
+        retString.push_str("\n");
+    }
+    return retString;
+}
+
+fn doesRowContainX(needle: char, hayStack: &Vec<char>) -> bool {
+    let mut found = false;
+    for x in hayStack {
+        if (*x == needle) {
+            found = true;
+            break;
+        }
+    }
+    return found;
+}
+
+fn getColumn(vec: &Observation, idx: usize) -> Vec<char> {
+    let mut retVec: Vec<char> = vec![];
+    for x in vec {
+        retVec.push(x[idx]);
+    }
+    return retVec;
+}
+
+fn cratePosMap(vec: &Observation) -> GalaxyMap {
+    let mut map: GalaxyMap = vec![];
+    for y in 0..vec.len() {
+        for x in 0..vec[y].len() {
+            if (vec[y][x] == '#') {
+                map.push(Pos2::new(x as i32, y as i32));
             }
         }
     }
-    return retVal;
+    return map;
 }
 
-fn getSurroundingElements(vec: &Vec<Vec<char>>, row: i32, column: i32) -> Vec<char> {
-    let offsets = vec![
-        [-1, -1],
-        [0, -1],
-        [1, -1],
-        [1, 0],
-        [1, 1],
-        [0, 1],
-        [-1, 1],
-        [-1, 0],
-    ];
-    let mut retVec: Vec<char> = vec![];
-    let width = vec[0].len() as i32;
-    let height = vec.len() as i32;
-    for e in offsets {
-        let x = column as i32 + e[0] as i32;
-        let y = row as i32 + e[1] as i32;
-        if (x >= 0 && x < width && y >= 0 && y < height) {
-            retVec.push(vec[x as usize][y as usize])
+fn pushColumn(vec: &Observation, column: Vec<char>) -> Observation {
+    let mut retVec = vec.clone();
+    if (vec.len() == 0) {
+        for i in 0..column.len() {
+            retVec.push(vec![column[i]]);
         }
+        return retVec;
+    }
+    for i in 0..column.len() {
+        retVec[i].push(column[i]);
     }
     return retVec;
 }
